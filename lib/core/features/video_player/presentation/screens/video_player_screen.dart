@@ -7,11 +7,54 @@ import 'package:video_player/video_player.dart';
 import 'package:video_player_test/core/features/video_player/presentation/providers/video_provider.dart';
 import 'package:video_player_test/core/features/video_player/providers/video_controller_provider.dart';
 
-class VideoScreen extends ConsumerWidget {
+class VideoScreen extends ConsumerStatefulWidget {
   const VideoScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  _VideoScreenState createState() => _VideoScreenState();
+}
+
+class _VideoScreenState extends ConsumerState<VideoScreen> {
+  bool _controlsVisible = true; // To manage the visibility of controls
+  late Timer _hideControlsTimer; // Timer for hiding controls
+
+  @override
+  void initState() {
+    super.initState();
+    _startHideControlsTimer();
+  }
+
+  @override
+  void dispose() {
+    _hideControlsTimer.cancel(); // Cancel the timer when widget is disposed
+    super.dispose();
+  }
+
+  // Function to start the timer to hide controls after 2 seconds
+  void _startHideControlsTimer() {
+    _hideControlsTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _controlsVisible = false;
+        });
+      }
+    });
+  }
+
+  // Function to handle tap on the video and show controls again
+  void _onVideoTap() {
+    if (_controlsVisible) {
+      _startHideControlsTimer(); // Restart timer when touched
+    } else {
+      setState(() {
+        _controlsVisible = true;
+      });
+      _startHideControlsTimer(); // Restart timer when controls are shown
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final videoAsync = ref.watch(videoProvider);
     final controller = ref.watch(videoControllerProvider);
 
@@ -41,87 +84,153 @@ class VideoScreen extends ConsumerWidget {
                 }
 
                 return controller != null && controller.value.isInitialized
-                    ? Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        isPortrait
-                            ? Column(
-                              children: [
-                                // Video at the top (YouTube-style)
-                                FractionallySizedBox(
-                                  widthFactor: 1,
-                                  child: AspectRatio(
-                                    aspectRatio: controller.value.aspectRatio,
-                                    child: Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        VideoPlayer(controller),
-                                        Align(
-                                          alignment: Alignment.bottomCenter,
-                                          child: VideoControls(
-                                            controller: controller,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-
-                                // Video details section
-                                Expanded(
-                                  child: Container(
-                                    padding: EdgeInsets.all(16),
-                                    width: MediaQuery.of(context).size.width,
-                                    color: Colors.white,
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          "Butterfly Video",
-                                          style: TextStyle(
-                                            color: Colors.black,
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 18,
-                                          ),
-                                        ),
-                                        SizedBox(height: 5),
-                                        Text(
-                                          "A beautiful butterfly in slow motion",
-                                          style: TextStyle(
-                                            color: Colors.black,
-                                            fontWeight: FontWeight.w500,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            )
-                            : Container(
-                              width: double.infinity,
-                              height: double.infinity,
-                              alignment: Alignment.center,
-                              child: Stack(
-                                alignment: Alignment.center,
+                    ? isPortrait
+                        ? GestureDetector(
+                          onTap:
+                              _onVideoTap, // Detect tap to show/hide controls
+                          child: Column(
+                            children: [
+                              // Video takes the top part of the screen
+                              Stack(
+                                alignment: Alignment.bottomCenter,
                                 children: [
-                                  AspectRatio(
-                                    aspectRatio: controller.value.aspectRatio,
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height:
+                                        MediaQuery.of(context).size.height *
+                                        0.3, // Adjust height
                                     child: VideoPlayer(controller),
                                   ),
+                                  if (_controlsVisible) // Show controls only if visible
+                                    Positioned(
+                                      bottom: 100,
+                                      left: 0,
+                                      right: 0,
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceEvenly,
+                                        children: [
+                                          // 10-second skip backward button
+                                          IconButton(
+                                            icon: Icon(
+                                              Icons.replay_10,
+                                              color: Colors.white,
+                                            ),
+                                            onPressed: () {
+                                              final newPosition =
+                                                  controller.value.position -
+                                                  Duration(seconds: 10);
+                                              controller.seekTo(newPosition);
+                                            },
+                                          ),
+
+                                          // Play/Pause button
+                                          IconButton(
+                                            icon: Icon(
+                                              controller.value.isPlaying
+                                                  ? Icons.pause
+                                                  : Icons.play_arrow,
+                                              color: Colors.white,
+                                            ),
+                                            onPressed: () {
+                                              controller.pause() !=
+                                                  controller
+                                                      .play(); // Plays both video and audio
+                                            },
+                                          ),
+
+                                          // 10-second skip forward button
+                                          IconButton(
+                                            icon: Icon(
+                                              Icons.forward_10,
+                                              color: Colors.white,
+                                            ),
+                                            onPressed: () {
+                                              final newPosition =
+                                                  controller.value.position +
+                                                  Duration(seconds: 10);
+                                              controller.seekTo(newPosition);
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  // Seekbar
                                   Align(
                                     alignment: Alignment.bottomCenter,
-                                    child: VideoControls(
-                                      controller: controller,
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: ValueListenableBuilder<
+                                            VideoPlayerValue
+                                          >(
+                                            valueListenable: controller,
+                                            builder: (context, value, child) {
+                                              return Slider(
+                                                value:
+                                                    value.position.inSeconds
+                                                        .toDouble(),
+                                                min: 0,
+                                                max:
+                                                    value.duration.inSeconds
+                                                        .toDouble(),
+                                                onChanged: (newValue) {
+                                                  controller.seekTo(
+                                                    Duration(
+                                                      seconds: newValue.toInt(),
+                                                    ),
+                                                  );
+                                                },
+                                                activeColor: Colors.white,
+                                                inactiveColor: Colors.grey,
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
-                      ],
-                    )
+                              // Blank space for description below the video
+                              Expanded(
+                                child: Container(
+                                  width: MediaQuery.of(context).size.width,
+                                  padding: EdgeInsets.all(16),
+                                  color: Colors.white,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        "Video Name",
+                                        style: TextStyle(
+                                          color: Colors.black,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 18,
+                                        ),
+                                      ),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        "Description goes here...",
+                                        style: TextStyle(
+                                          color: Colors.black,
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                        : SizedBox(
+                          width: double.infinity,
+                          height: double.infinity,
+                          child: VideoPlayer(controller),
+                        )
                     : CircularProgressIndicator();
               },
               loading: () => CircularProgressIndicator(),
@@ -135,123 +244,5 @@ class VideoScreen extends ConsumerWidget {
         );
       },
     );
-  }
-}
-
-// Video Controls Widget
-class VideoControls extends StatefulWidget {
-  final VideoPlayerController controller;
-  const VideoControls({super.key, required this.controller});
-
-  @override
-  _VideoControlsState createState() => _VideoControlsState();
-}
-
-class _VideoControlsState extends State<VideoControls> {
-  bool isPlaying = false;
-  bool showControls = true;
-  Timer? _hideTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.controller.addListener(() {
-      if (mounted) {
-        setState(() {
-          isPlaying = widget.controller.value.isPlaying;
-        });
-      }
-    });
-
-    // Show controls for first 2 seconds
-    _startHideTimer(initialDelay: 2);
-  }
-
-  void _toggleControls() {
-    setState(() {
-      showControls = !showControls;
-    });
-
-    if (showControls) {
-      _startHideTimer();
-    } else {
-      _hideTimer?.cancel();
-    }
-  }
-
-  void _startHideTimer({int initialDelay = 3}) {
-    _hideTimer?.cancel();
-    _hideTimer = Timer(Duration(seconds: initialDelay), () {
-      if (mounted) {
-        setState(() {
-          showControls = false;
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _hideTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: _toggleControls,
-      child: AnimatedOpacity(
-        opacity: showControls ? 1.0 : 0.0,
-        duration: Duration(milliseconds: 300),
-        child: Container(
-          color: Colors.black.withOpacity(0.5),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              VideoProgressIndicator(
-                widget.controller,
-                allowScrubbing: true,
-                colors: VideoProgressColors(
-                  playedColor: Colors.red,
-                  bufferedColor: Colors.grey,
-                  backgroundColor: Colors.white,
-                ),
-              ),
-              SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      isPlaying ? Icons.pause : Icons.play_arrow,
-                      color: Colors.white,
-                      size: 30,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        isPlaying
-                            ? widget.controller.pause()
-                            : widget.controller.play();
-                      });
-
-                      _toggleControls();
-                    },
-                  ),
-                  Text(
-                    "${_formatDuration(widget.controller.value.position)} / ${_formatDuration(widget.controller.value.duration)}",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, "0");
-    return "${twoDigits(duration.inMinutes)}:${twoDigits(duration.inSeconds.remainder(60))}";
   }
 }

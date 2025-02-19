@@ -12,11 +12,11 @@ class VideoControllerNotifier extends StateNotifier<VideoPlayerController?> {
     final controller = VideoPlayerController.networkUrl(Uri.parse(url));
 
     // Initialize and play the video when ready
-    await controller.initialize();
-    controller.play();
 
-    // Update state with the new controller
+    await controller.initialize();
+    controller.setLooping(true);
     state = controller;
+    controller.play();
   }
 
   @override
